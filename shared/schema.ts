@@ -60,6 +60,17 @@ export type InsertBlogProject = z.infer<typeof insertBlogProjectSchema>;
 export type SerpResult = typeof serpResults.$inferSelect;
 export type InsertSerpResult = z.infer<typeof insertSerpResultSchema>;
 
+// AI Model types
+export type AIModel = 'gpt-5' | 'gpt-4o' | 'gpt-4o-mini' | 'gemini-2.5-flash';
+
+export interface AIModelConfig {
+  id: AIModel;
+  name: string;
+  description: string;
+  costLevel: 'low' | 'medium' | 'high';
+  provider: 'openai' | 'google';
+}
+
 // Additional types for API responses
 export type SerpAnalysis = {
   contentType: string;

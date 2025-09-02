@@ -8,7 +8,7 @@ import SerpAnalysisSection from "@/components/serp-analysis-section";
 import SeoplanSection from "@/components/seo-plan-section";
 import ContentGenerationSection from "@/components/content-generation-section";
 import { Loader2 } from "lucide-react";
-import type { SerpAnalysis, SeoOptimizationPlan, GeneratedContent, BlogProject } from "@shared/schema";
+import type { SerpAnalysis, SeoOptimizationPlan, GeneratedContent, BlogProject, AIModelConfig, AIModel } from "@shared/schema";
 
 export default function BlogGenerator() {
   const [currentStep, setCurrentStep] = useState(1);
@@ -18,6 +18,7 @@ export default function BlogGenerator() {
     targetAudience: "",
     contentLength: "",
     notes: "",
+    aiModel: "gemini-2.5-flash" as AIModel,
   });
   const [serpAnalysis, setSerpAnalysis] = useState<SerpAnalysis | null>(null);
   const [seoplan, setSeoplan] = useState<SeoOptimizationPlan | null>(null);
@@ -28,7 +29,10 @@ export default function BlogGenerator() {
   // SERP Analysis Mutation
   const serpAnalysisMutation = useMutation({
     mutationFn: async (keyword: string) => {
-      const response = await apiRequest("POST", "/api/serp/analyze", { keyword });
+      const response = await apiRequest("POST", "/api/serp/analyze", { 
+        keyword, 
+        model: projectData.aiModel 
+      });
       return response.json();
     },
     onSuccess: (data) => {
@@ -57,6 +61,7 @@ export default function BlogGenerator() {
         serpAnalysis,
         targetAudience: projectData.targetAudience,
         contentLength: projectData.contentLength,
+        model: projectData.aiModel,
       });
       return response.json();
     },
@@ -87,6 +92,7 @@ export default function BlogGenerator() {
         notes: projectData.notes,
         targetAudience: projectData.targetAudience,
         contentLength: projectData.contentLength,
+        model: projectData.aiModel,
       });
       return response.json();
     },
@@ -137,6 +143,12 @@ export default function BlogGenerator() {
         variant: "destructive",
       });
     },
+  });
+
+  // AI Models Query
+  const { data: aiModels = [] } = useQuery<AIModelConfig[]>({
+    queryKey: ["/api/ai/models"],
+    staleTime: 30 * 60 * 1000, // 30 minutes
   });
 
   // Recent Projects Query
@@ -236,6 +248,7 @@ export default function BlogGenerator() {
             <KeywordInputSection
               projectData={projectData}
               setProjectData={setProjectData}
+              aiModels={aiModels}
               onStartAnalysis={handleStartSerpAnalysis}
               isLoading={serpAnalysisMutation.isPending}
             />

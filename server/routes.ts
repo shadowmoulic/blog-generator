@@ -4,18 +4,27 @@ import { storage } from "./storage";
 import { insertBlogProjectSchema, insertSerpResultSchema } from "@shared/schema";
 import { z } from "zod";
 import axios from "axios";
-import OpenAI from "openai";
-
-const openai = new OpenAI({ 
-  apiKey: process.env.OPENAI_API_KEY || process.env.OPENAI_KEY || "default_key" 
-});
+import { analyzeSERPWithAI, generateSEOPlan, generateBlogContent, AI_MODELS, type AIModel } from "./ai-services";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   
+  // Get available AI models
+  app.get("/api/ai/models", async (req, res) => {
+    try {
+      res.json(AI_MODELS);
+    } catch (error) {
+      console.error('Get AI Models Error:', error);
+      res.status(500).json({ 
+        message: "Failed to get AI models",
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
   // SERP Analysis endpoint
   app.post("/api/serp/analyze", async (req, res) => {
     try {
-      const { keyword } = req.body;
+      const { keyword, model = 'gemini-2.5-flash' } = req.body;
       
       if (!keyword) {
         return res.status(400).json({ message: "Keyword is required" });
@@ -42,50 +51,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const serpData = serpResponse.data;
 
-      // Analyze SERP results using OpenAI
-      const analysisPrompt = `
-        Analyze these Google search results for the keyword "${keyword}" and provide a comprehensive SEO analysis.
-        
-        Search Results:
-        ${JSON.stringify(serpData.organic?.slice(0, 10) || [], null, 2)}
-        
-        Please analyze and return a JSON object with the following structure:
-        {
-          "contentType": "Most common content type (e.g., 'Listicle (78%)', 'Guide', 'Comparison')",
-          "avgWordCount": "Average word count as a number",
-          "tone": "Dominant tone (e.g., 'Professional', 'Casual', 'Technical')",
-          "topRankingPages": [
-            {
-              "position": 1,
-              "title": "Page title",
-              "url": "URL",
-              "wordCount": 2847,
-              "lastUpdated": "Jan 2025",
-              "keyElements": ["Comprehensive Lists", "Expert Reviews", "Screenshots"],
-              "description": "Key elements and unique aspects of this page"
-            }
-          ],
-          "competitiveAdvantages": ["Include 2025-specific features", "Add pricing comparison table"],
-          "recommendedStructure": ["Introduction (150-200 words)", "Main content sections"]
-        }
-      `;
-
-      const analysisResponse = await openai.chat.completions.create({
-        model: "gpt-5", // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
-        messages: [
-          {
-            role: "system",
-            content: "You are an expert SEO analyst. Analyze search results and provide detailed insights for content optimization."
-          },
-          {
-            role: "user",
-            content: analysisPrompt
-          }
-        ],
-        response_format: { type: "json_object" },
-      });
-
-      const analysis = JSON.parse(analysisResponse.choices[0].message.content || '{}');
+      // Analyze SERP results using selected AI model
+      const analysis = await analyzeSERPWithAI(keyword, serpData, model as AIModel);
 
       // Save SERP result
       const serpResult = await storage.createSerpResult({
@@ -108,63 +75,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Generate SEO Plan endpoint
   app.post("/api/seo/plan", async (req, res) => {
     try {
-      const { keyword, secondaryKeywords, serpAnalysis, targetAudience, contentLength } = req.body;
+      const { keyword, secondaryKeywords, serpAnalysis, targetAudience, contentLength, model = 'gemini-2.5-flash' } = req.body;
 
-      const planPrompt = `
-        Create a comprehensive SEO optimization plan for the keyword "${keyword}".
-        
-        Context:
-        - Primary Keyword: ${keyword}
-        - Secondary Keywords: ${secondaryKeywords?.join(', ') || 'None'}
-        - Target Audience: ${targetAudience || 'General'}
-        - Content Length: ${contentLength || 'Medium'}
-        - SERP Analysis: ${JSON.stringify(serpAnalysis, null, 2)}
-        
-        Generate a detailed SEO plan in this JSON format:
-        {
-          "suggestedTitle": "SEO-optimized title with primary keyword",
-          "titleLength": 58,
-          "structure": {
-            "intro": "Introduction section description",
-            "methodology": "How we tested/research methodology section",
-            "mainContent": "Main content sections breakdown",
-            "comparison": "Comparison/table section",
-            "conclusion": "Conclusion section"
-          },
-          "keywordDistribution": {
-            "primary": {
-              "target": 10,
-              "placement": ["Title", "H1", "2x H2s", "naturally in content"]
-            },
-            "secondary": {
-              "target": 5,
-              "placement": ["H2s", "H3s", "body content"]
-            },
-            "lsi": {
-              "target": 18,
-              "placement": ["throughout content", "subheadings"]
-            }
-          },
-          "competitiveAdvantages": ["2025-specific updates", "pricing comparison", "expert testing"]
-        }
-      `;
-
-      const planResponse = await openai.chat.completions.create({
-        model: "gpt-5", // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
-        messages: [
-          {
-            role: "system",
-            content: "You are an expert SEO strategist. Create detailed optimization plans based on SERP analysis and keyword research."
-          },
-          {
-            role: "user",
-            content: planPrompt
-          }
-        ],
-        response_format: { type: "json_object" },
-      });
-
-      const seoplan = JSON.parse(planResponse.choices[0].message.content || '{}');
+      const seoplan = await generateSEOPlan(
+        keyword,
+        secondaryKeywords,
+        serpAnalysis,
+        targetAudience,
+        contentLength,
+        model as AIModel
+      );
       res.json(seoplan);
 
     } catch (error) {
@@ -179,79 +99,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Generate Content endpoint
   app.post("/api/content/generate", async (req, res) => {
     try {
-      const { keyword, secondaryKeywords, seoplan, notes, targetAudience, contentLength } = req.body;
+      const { keyword, secondaryKeywords, seoplan, notes, targetAudience, contentLength, model = 'gemini-2.5-flash' } = req.body;
 
-      const lengthGuide = {
-        'Short (800-1,500 words)': '1200 words',
-        'Medium (1,500-2,500 words)': '2000 words',
-        'Long (2,500-4,000 words)': '3200 words',
-        'Extra Long (4,000+ words)': '4500 words'
-      };
-
-      const targetWords = lengthGuide[contentLength as keyof typeof lengthGuide] || '2000 words';
-
-      const contentPrompt = `
-        Write a comprehensive, SEO-optimized blog post about "${keyword}".
-        
-        Requirements:
-        - Target length: ${targetWords}
-        - Primary keyword: ${keyword}
-        - Secondary keywords: ${secondaryKeywords?.join(', ') || 'None'}
-        - Target audience: ${targetAudience || 'General'}
-        - Additional context: ${notes || 'None'}
-        
-        SEO Plan to follow:
-        ${JSON.stringify(seoplan, null, 2)}
-        
-        Create engaging, high-quality content that:
-        1. Uses the suggested title from the SEO plan
-        2. Naturally incorporates keywords as specified in the distribution plan
-        3. Follows the recommended structure
-        4. Includes the competitive advantages
-        5. Provides genuine value to readers
-        6. Maintains professional, authoritative tone
-        7. Uses current information and 2025 context where relevant
-        
-        Return in this JSON format:
-        {
-          "title": "The exact title from SEO plan",
-          "metaDescription": "SEO-optimized meta description (150-160 chars)",
-          "intro": "Engaging introduction paragraph",
-          "sections": [
-            {
-              "heading": "H2 section heading",
-              "content": "Detailed section content",
-              "subheadings": [
-                {
-                  "title": "H3 subheading",
-                  "content": "Subheading content"
-                }
-              ]
-            }
-          ],
-          "conclusion": "Strong conclusion paragraph",
-          "wordCount": 2456,
-          "seoScore": 87,
-          "readingTime": 10
-        }
-      `;
-
-      const contentResponse = await openai.chat.completions.create({
-        model: "gpt-5", // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
-        messages: [
-          {
-            role: "system",
-            content: "You are an expert content writer specializing in SEO-optimized blog posts. Create engaging, informative content that ranks well and provides genuine value to readers."
-          },
-          {
-            role: "user",
-            content: contentPrompt
-          }
-        ],
-        response_format: { type: "json_object" },
-      });
-
-      const generatedContent = JSON.parse(contentResponse.choices[0].message.content || '{}');
+      const generatedContent = await generateBlogContent(
+        keyword,
+        secondaryKeywords,
+        seoplan,
+        notes,
+        targetAudience,
+        contentLength,
+        model as AIModel
+      );
       res.json(generatedContent);
 
     } catch (error) {

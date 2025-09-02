@@ -4,7 +4,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { X, Plus, Search, Clock } from "lucide-react";
+import { X, Plus, Search, Clock, Bot, Zap, DollarSign } from "lucide-react";
+import type { AIModelConfig, AIModel } from "@shared/schema";
 import { useState } from "react";
 
 interface KeywordInputSectionProps {
@@ -14,8 +15,10 @@ interface KeywordInputSectionProps {
     targetAudience: string;
     contentLength: string;
     notes: string;
+    aiModel: AIModel;
   };
   setProjectData: (data: any) => void;
+  aiModels: AIModelConfig[];
   onStartAnalysis: () => void;
   isLoading: boolean;
 }
@@ -23,6 +26,7 @@ interface KeywordInputSectionProps {
 export default function KeywordInputSection({
   projectData,
   setProjectData,
+  aiModels,
   onStartAnalysis,
   isLoading,
 }: KeywordInputSectionProps) {
@@ -163,6 +167,35 @@ export default function KeywordInputSection({
               </SelectContent>
             </Select>
           </div>
+
+          <div>
+            <Label htmlFor="ai-model" className="text-sm font-medium text-foreground">
+              AI Model for Content Generation
+            </Label>
+            <Select value={projectData.aiModel} onValueChange={(value) => setProjectData({ ...projectData, aiModel: value as AIModel })}>
+              <SelectTrigger className="mt-2" data-testid="select-ai-model">
+                <SelectValue placeholder="Select AI model" />
+              </SelectTrigger>
+              <SelectContent>
+                {aiModels.map((model) => (
+                  <SelectItem key={model.id} value={model.id}>
+                    <div className="flex items-center space-x-2">
+                      <Bot className="w-4 h-4" />
+                      <span>{model.name}</span>
+                      <div className="flex items-center space-x-1">
+                        {model.costLevel === 'low' && <Zap className="w-3 h-3 text-green-500" />}
+                        {model.costLevel === 'medium' && <DollarSign className="w-3 h-3 text-yellow-500" />}
+                        {model.costLevel === 'high' && <DollarSign className="w-3 h-3 text-red-500" />}
+                      </div>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-1">
+              {aiModels.find(m => m.id === projectData.aiModel)?.description || 'Choose your preferred AI model'}
+            </p>
+          </div>
         </div>
 
         <div>
@@ -185,7 +218,7 @@ export default function KeywordInputSection({
       <div className="flex justify-between items-center mt-6 pt-6 border-t border-border">
         <div className="flex items-center space-x-2 text-sm text-muted-foreground">
           <i className="fas fa-info-circle"></i>
-          <span>Using Serper.dev for SERP analysis & GPT-5 for content generation</span>
+          <span>Using Serper.dev for SERP analysis & {aiModels.find(m => m.id === projectData.aiModel)?.name || 'AI'} for content generation</span>
         </div>
         
         <Button
