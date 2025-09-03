@@ -4,7 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { X, Plus, Search, Clock, Bot, Zap, DollarSign } from "lucide-react";
+import { X, Plus, Search, Clock, Bot, Zap, DollarSign, Sparkles, Loader2 } from "lucide-react";
 import type { AIModelConfig, AIModel } from "@shared/schema";
 import { useState } from "react";
 
@@ -20,7 +20,9 @@ interface KeywordInputSectionProps {
   setProjectData: (data: any) => void;
   aiModels: AIModelConfig[];
   onStartAnalysis: () => void;
+  onAutoGenerate: () => void;
   isLoading: boolean;
+  isAutoGenerating: boolean;
 }
 
 export default function KeywordInputSection({
@@ -28,7 +30,9 @@ export default function KeywordInputSection({
   setProjectData,
   aiModels,
   onStartAnalysis,
+  onAutoGenerate,
   isLoading,
+  isAutoGenerating,
 }: KeywordInputSectionProps) {
   const [newSecondaryKeyword, setNewSecondaryKeyword] = useState("");
 
@@ -221,15 +225,37 @@ export default function KeywordInputSection({
           <span>Using Serper.dev for SERP analysis & {aiModels.find(m => m.id === projectData.aiModel)?.name || 'AI'} for content generation</span>
         </div>
         
-        <Button
-          onClick={onStartAnalysis}
-          disabled={!projectData.primaryKeyword.trim() || isLoading}
-          className="font-medium"
-          data-testid="button-start-serp-analysis"
-        >
-          <Search className="w-4 h-4 mr-2" />
-          {isLoading ? "Analyzing..." : "Start SERP Analysis"}
-        </Button>
+        <div className="flex gap-3">
+          <Button
+            onClick={onStartAnalysis}
+            disabled={!projectData.primaryKeyword.trim() || isLoading || isAutoGenerating}
+            className="font-medium"
+            data-testid="button-start-serp-analysis"
+          >
+            <Search className="w-4 h-4 mr-2" />
+            {isLoading ? "Analyzing..." : "Start SERP Analysis"}
+          </Button>
+
+          <Button
+            onClick={onAutoGenerate}
+            disabled={!projectData.primaryKeyword.trim() || isLoading || isAutoGenerating}
+            variant="outline"
+            className="font-medium border-2 border-primary text-primary hover:bg-primary hover:text-primary-foreground"
+            data-testid="button-auto-generate"
+          >
+            {isAutoGenerating ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Auto-Generating...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4 mr-2" />
+                Auto-Generate All Steps
+              </>
+            )}
+          </Button>
+        </div>
       </div>
     </div>
   );

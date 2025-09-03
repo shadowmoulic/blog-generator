@@ -3,21 +3,31 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Edit, RefreshCw, Save, Download, ChevronDown, FileText, FileCode, Globe, File, Calendar, Clock, User } from "lucide-react";
+import { Edit, RefreshCw, Save, Download, ChevronDown, FileText, FileCode, Globe, File, Calendar, Clock, User, Image, Loader2 } from "lucide-react";
 import type { GeneratedContent } from "@shared/schema";
 
 interface ContentGenerationSectionProps {
   content: GeneratedContent;
+  setContent?: (content: GeneratedContent) => void;
   onExport: (format: string) => void;
+  onGenerateImages?: () => void;
   isExporting: boolean;
+  isGeneratingImages?: boolean;
+  enableEdit?: boolean;
 }
 
 export default function ContentGenerationSection({
   content,
+  setContent,
   onExport,
+  onGenerateImages,
   isExporting,
+  isGeneratingImages,
+  enableEdit = false,
 }: ContentGenerationSectionProps) {
   const [activeTab, setActiveTab] = useState("preview");
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedContent, setEditedContent] = useState(content);
 
   const formatDate = () => {
     return new Date().toLocaleDateString('en-US', {
@@ -251,10 +261,52 @@ export default function ContentGenerationSection({
       {/* Content Actions */}
       <div className="flex items-center justify-between mt-6 pt-6 border-t border-border">
         <div className="flex items-center space-x-3">
-          <Button variant="secondary" data-testid="button-edit-content">
-            <Edit className="w-4 h-4 mr-2" />
-            Edit Content
-          </Button>
+          {enableEdit && (
+            <Button 
+              variant="secondary" 
+              onClick={() => setIsEditing(!isEditing)}
+              data-testid="button-edit-content"
+            >
+              <Edit className="w-4 h-4 mr-2" />
+              {isEditing ? 'Cancel Edit' : 'Edit Content'}
+            </Button>
+          )}
+
+          {onGenerateImages && (
+            <Button
+              variant="secondary" 
+              onClick={onGenerateImages}
+              disabled={isGeneratingImages}
+              data-testid="button-generate-images"
+            >
+              {isGeneratingImages ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Generating Images...
+                </>
+              ) : (
+                <>
+                  <Image className="w-4 h-4 mr-2" />
+                  Generate Images
+                </>
+              )}
+            </Button>
+          )}
+
+          {isEditing && enableEdit && (
+            <Button
+              onClick={() => {
+                if (setContent) {
+                  setContent(editedContent);
+                }
+                setIsEditing(false);
+              }}
+              data-testid="button-save-content"
+            >
+              <Save className="w-4 h-4 mr-2" />
+              Save Changes
+            </Button>
+          )}
           
           <Button variant="secondary" data-testid="button-regenerate">
             <RefreshCw className="w-4 h-4 mr-2" />

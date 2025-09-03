@@ -8,7 +8,7 @@ import SerpAnalysisSection from "@/components/serp-analysis-section";
 import SeoplanSection from "@/components/seo-plan-section";
 import ContentGenerationSection from "@/components/content-generation-section";
 import { Loader2 } from "lucide-react";
-import type { SerpAnalysis, SeoOptimizationPlan, GeneratedContent, BlogProject, AIModelConfig, AIModel } from "@shared/schema";
+import type { SerpAnalysis, SeoOptimizationPlan, GeneratedContent, BlogProject, AIModelConfig, AIModel, GeneratedImage } from "@shared/schema";
 
 export default function BlogGenerator() {
   const [currentStep, setCurrentStep] = useState(1);
@@ -23,6 +23,8 @@ export default function BlogGenerator() {
   const [serpAnalysis, setSerpAnalysis] = useState<SerpAnalysis | null>(null);
   const [seoplan, setSeoplan] = useState<SeoOptimizationPlan | null>(null);
   const [generatedContent, setGeneratedContent] = useState<GeneratedContent | null>(null);
+  const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
+  const [isAutoGenerating, setIsAutoGenerating] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -145,6 +147,68 @@ export default function BlogGenerator() {
     },
   });
 
+  // Auto-generate Mutation
+  const autoGenerateMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/auto-generate", {
+        keyword: projectData.primaryKeyword,
+        secondaryKeywords: projectData.secondaryKeywords,
+        targetAudience: projectData.targetAudience,
+        contentLength: projectData.contentLength,
+        notes: projectData.notes,
+        model: projectData.aiModel,
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setSerpAnalysis(data.serpAnalysis);
+      setSeoplan(data.seoplan);
+      setGeneratedContent(data.content);
+      setGeneratedImages(data.images || []);
+      setCurrentStep(5); // Go to final step with images
+      setIsAutoGenerating(false);
+      toast({
+        title: "Blog Generated Successfully!",
+        description: "Complete SEO-optimized blog with images ready.",
+      });
+    },
+    onError: (error) => {
+      setIsAutoGenerating(false);
+      toast({
+        title: "Auto-Generation Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Image Generation Mutation
+  const imageGenerationMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/images/generate", {
+        keyword: projectData.primaryKeyword,
+        title: generatedContent?.title || projectData.primaryKeyword,
+        sections: generatedContent?.sections || [],
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setGeneratedImages(data.images || []);
+      setCurrentStep(5);
+      toast({
+        title: "Images Generated",
+        description: "Blog images created successfully.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Image Generation Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   // AI Models Query
   const { data: aiModels = [] } = useQuery<AIModelConfig[]>({
     queryKey: ["/api/ai/models"],
@@ -191,6 +255,33 @@ export default function BlogGenerator() {
       return;
     }
     contentMutation.mutate();
+  };
+
+  const handleAutoGenerate = () => {
+    if (!projectData.primaryKeyword.trim()) {
+      toast({
+        title: "Keyword Required",
+        description: "Please enter a primary keyword to continue.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsAutoGenerating(true);
+    autoGenerateMutation.mutate();
+  };
+
+  const handleGenerateImages = () => {
+    if (!generatedContent) {
+      toast({
+        title: "Content Required",
+        description: "Generate content first before creating images.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    imageGenerationMutation.mutate();
   };
 
   const handleExport = (format: string) => {
@@ -250,7 +341,9 @@ export default function BlogGenerator() {
               setProjectData={setProjectData}
               aiModels={aiModels}
               onStartAnalysis={handleStartSerpAnalysis}
+              onAutoGenerate={handleAutoGenerate}
               isLoading={serpAnalysisMutation.isPending}
+              isAutoGenerating={isAutoGenerating || autoGenerateMutation.isPending}
             />
 
             {/* Step 2: SERP Analysis */}
@@ -276,9 +369,51 @@ export default function BlogGenerator() {
             {generatedContent && (
               <ContentGenerationSection
                 content={generatedContent}
+                setContent={setGeneratedContent}
                 onExport={handleExport}
+                onGenerateImages={handleGenerateImages}
                 isExporting={exportMutation.isPending}
+                isGeneratingImages={imageGenerationMutation.isPending}
+                enableEdit={true}
               />
+            )}
+
+            {/* Step 5: Generated Images */}
+            {generatedImages.length > 0 && (
+              <div className="mb-8">
+                <div className="bg-card text-card-foreground rounded-lg border p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white font-medium text-sm">
+                        5
+                      </div>
+                      <h2 className="text-xl font-semibold">Generated Images</h2>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {generatedImages.length} images created
+                    </div>
+                  </div>
+
+                  <div className="grid md:grid-cols-2 gap-6">
+                    {generatedImages.map((image, index) => (
+                      <div key={index} className="bg-muted rounded-lg p-4">
+                        <img 
+                          src={image.url} 
+                          alt={image.prompt}
+                          className="w-full h-48 object-cover rounded-lg mb-3"
+                          data-testid={`img-generated-${index}`}
+                        />
+                        <p className="text-sm text-muted-foreground mb-2">
+                          <strong>Prompt:</strong> {image.prompt}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Size: {image.width} x {image.height}px
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
             )}
 
             {/* Recent Projects */}

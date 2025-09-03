@@ -5,6 +5,7 @@ import { insertBlogProjectSchema, insertSerpResultSchema } from "@shared/schema"
 import { z } from "zod";
 import axios from "axios";
 import { analyzeSERPWithAI, generateSEOPlan, generateBlogContent, AI_MODELS, type AIModel } from "./ai-services";
+import { generateImagesWithPollination, generateImagePrompts } from "./image-service";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   
@@ -237,6 +238,101 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error('Export Error:', error);
       res.status(500).json({ 
         message: "Failed to export content",
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // Generate Images endpoint
+  app.post("/api/images/generate", async (req, res) => {
+    try {
+      const { keyword, title, sections } = req.body;
+
+      if (!keyword || !title) {
+        return res.status(400).json({ message: "Keyword and title are required" });
+      }
+
+      const prompts = generateImagePrompts(keyword, title, sections);
+      const images = await generateImagesWithPollination(prompts);
+
+      res.json({ images });
+
+    } catch (error) {
+      console.error('Image Generation Error:', error);
+      res.status(500).json({ 
+        message: "Failed to generate images",
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // Auto-generate complete blog endpoint
+  app.post("/api/auto-generate", async (req, res) => {
+    try {
+      const { 
+        keyword, 
+        secondaryKeywords, 
+        targetAudience, 
+        contentLength, 
+        notes,
+        model = 'gemini-2.5-flash'
+      } = req.body;
+
+      if (!keyword) {
+        return res.status(400).json({ message: "Keyword is required" });
+      }
+
+      // Step 1: SERP Analysis
+      const serpResponse = await axios.get("https://google.serper.dev/search", {
+        params: {
+          q: keyword,
+          gl: "us",
+          hl: "en",
+        },
+        headers: {
+          "X-API-KEY": process.env.SERPER_API_KEY || "default_key",
+        },
+      });
+
+      const serpData = serpResponse.data;
+      const serpAnalysis = await analyzeSERPWithAI(keyword, serpData, model as AIModel);
+
+      // Step 2: SEO Plan Generation
+      const seoplan = await generateSEOPlan(
+        keyword,
+        secondaryKeywords,
+        serpAnalysis,
+        targetAudience,
+        contentLength,
+        model as AIModel
+      );
+
+      // Step 3: Content Generation
+      const generatedContent = await generateBlogContent(
+        keyword,
+        secondaryKeywords,
+        seoplan,
+        notes,
+        targetAudience,
+        contentLength,
+        model as AIModel
+      );
+
+      // Step 4: Image Generation
+      const prompts = generateImagePrompts(keyword, generatedContent.title, generatedContent.sections);
+      const images = await generateImagesWithPollination(prompts);
+
+      res.json({
+        serpAnalysis,
+        seoplan,
+        content: generatedContent,
+        images: images
+      });
+
+    } catch (error) {
+      console.error('Auto-Generate Error:', error);
+      res.status(500).json({ 
+        message: "Failed to auto-generate blog",
         error: error instanceof Error ? error.message : "Unknown error"
       });
     }

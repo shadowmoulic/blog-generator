@@ -71,6 +71,14 @@ export interface AIModelConfig {
   provider: 'openai' | 'google';
 }
 
+// Image types
+export interface GeneratedImage {
+  url: string;
+  prompt: string;
+  width: number;
+  height: number;
+}
+
 // Additional types for API responses
 export type SerpAnalysis = {
   contentType: string;
