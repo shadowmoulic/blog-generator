@@ -3,11 +3,13 @@
   "builds": [
     {
       "src": "server/index.ts",
-      "use": "@vercel/node",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "client/package.json",
+      "use": "@vercel/static-build",
       "config": {
-        "includeFiles": [
-          "client/**"
-        ]
+        "outputDirectory": "dist"
       }
     }
   ],
@@ -19,6 +21,14 @@
     {
       "src": "/(.*)",
       "dest": "client/index.html"
+    }
+  ],
+  "installCommand": "npm install && cd client && npm install",
+  "buildCommand": "cd client && npm run build && cd ..",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/client/index.html"
     }
   ]
 }
